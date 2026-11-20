@@ -1,4 +1,11 @@
-import { useState, Children, isValidElement, cloneElement } from "react";
+import {
+  useState,
+  useEffect,
+  Children,
+  isValidElement,
+  cloneElement,
+} from "react";
+import { useAuth } from "./context/AuthContext";
 
 import {
   LayoutDashboard,
@@ -889,7 +896,17 @@ const initialAssessments = [
   },
 ];
 
+function readAdminStorage(key, fallback) {
+  try {
+    const saved = localStorage.getItem(key);
+    return saved ? JSON.parse(saved) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
 function AdminDashboard() {
+  const { farmers: registeredAccounts = [] } = useAuth();
   const [activePage, setActivePage] = useState("Dashboard");
 
   const [menuOpen, setMenuOpen] = useState(false);
@@ -913,7 +930,9 @@ function AdminDashboard() {
   );
 
   const [submitted, setSubmitted] = useState(false);
-  const [farmers, setFarmers] = useState(initialFarmers);
+  const [farmers, setFarmers] = useState(() =>
+    readAdminStorage("agrinova_admin_farmers", initialFarmers),
+  );
   const [farmerSearch, setFarmerSearch] = useState("");
   const [farmerStatus, setFarmerStatus] = useState("All");
   const [selectedFarmer, setSelectedFarmer] = useState(null);
@@ -924,7 +943,9 @@ function AdminDashboard() {
   const [newFarmerLanguage, setNewFarmerLanguage] = useState("Kinyarwanda");
   const [farmerFormError, setFarmerFormError] = useState("");
 
-  const [parcels, setParcels] = useState(initialParcels);
+  const [parcels, setParcels] = useState(() =>
+    readAdminStorage("agrinova_admin_parcels", initialParcels),
+  );
   const [parcelSearch, setParcelSearch] = useState("");
   const [parcelStatus, setParcelStatus] = useState("All");
   const [showAddParcel, setShowAddParcel] = useState(false);
@@ -938,7 +959,9 @@ function AdminDashboard() {
   const [soilSearch, setSoilSearch] = useState("");
   const [soilRecords] = useState(initialSoilRecords);
   const [weatherDistrict, setWeatherDistrict] = useState("Kigali");
-  const [assessments] = useState(initialAssessments);
+  const [assessments, setAssessments] = useState(() =>
+    readAdminStorage("agrinova_admin_assessments", initialAssessments),
+  );
   const [assessmentFilter, setAssessmentFilter] = useState("All");
   const [chatMessages, setChatMessages] = useState([
     {
@@ -947,14 +970,58 @@ function AdminDashboard() {
     },
   ]);
   const [chatInput, setChatInput] = useState("");
-  const [settings, setSettings] = useState({
-    platformName: "AgriNova",
-    contactEmail: "admin@agrinova.rw",
-    defaultLanguage: "Kinyarwanda",
-    notifications: true,
-    reviewRequired: true,
-  });
+  const [settings, setSettings] = useState(() =>
+    readAdminStorage("agrinova_admin_settings", {
+      platformName: "AgriNova",
+      contactEmail: "admin@agrinova.rw",
+      defaultLanguage: "Kinyarwanda",
+      notifications: true,
+      reviewRequired: true,
+    }),
+  );
   const [settingsSaved, setSettingsSaved] = useState(false);
+
+  // Combine real prototype registrations with farmers added by the admin.
+  // Passwords are deliberately excluded from the dashboard view model.
+  const registeredFarmers = registeredAccounts.map((account) => ({
+    id: account.id,
+    name: account.name || "Unnamed farmer",
+    phone: account.phone || "Not provided",
+    email: account.email || "Not provided",
+    district: account.district || "Not provided",
+    language: account.language || "Kinyarwanda",
+    parcels: 0,
+    status: "Active",
+    joined: account.createdAt
+      ? new Date(account.createdAt).toLocaleDateString("en-GB")
+      : "Registered account",
+    source: "Registration",
+  }));
+
+  const allFarmers = [...registeredFarmers, ...farmers].map((farmer) => ({
+    ...farmer,
+    parcels:
+      parcels.filter((farmParcel) => farmParcel.farmerId === farmer.id)
+        .length ||
+      farmer.parcels ||
+      0,
+  }));
+
+  // Keep admin-created demo records available after a page refresh.
+  useEffect(() => {
+    localStorage.setItem("agrinova_admin_farmers", JSON.stringify(farmers));
+  }, [farmers]);
+
+  useEffect(() => {
+    localStorage.setItem("agrinova_admin_parcels", JSON.stringify(parcels));
+  }, [parcels]);
+
+  useEffect(() => {
+    localStorage.setItem(
+      "agrinova_admin_assessments",
+      JSON.stringify(assessments),
+    );
+  }, [assessments]);
 
   const [formError, setFormError] = useState("");
 
@@ -1022,6 +1089,20 @@ function AdminDashboard() {
 
     setFormError("");
 
+    const selected = parcels.find((item) => item.id === parcel);
+    setAssessments((current) => [
+      {
+        id: `CA${String(Date.now()).slice(-6)}`,
+        farmer: selected?.farmer || "Not provided",
+        parcelId: selected?.id || parcel,
+        crop: "Awaiting AI assessment",
+        season,
+        type: "Open recommendation",
+        result: "Pending assessment",
+        date: new Date().toLocaleDateString("en-GB"),
+      },
+      ...current,
+    ]);
     setSubmitted(true);
   };
 
@@ -1034,6 +1115,23 @@ function AdminDashboard() {
 
     setFormError("");
 
+    const selected = parcels.find((item) => item.id === parcel);
+    setAssessments((current) => [
+      {
+        id: `CA${String(Date.now()).slice(-6)}`,
+        farmer: selected?.farmer || "Not provided",
+        parcelId: selected?.id || parcel,
+        crop: receivedCrop,
+        season,
+        type: "Received crop advisory",
+        result: "Information captured",
+        date: new Date().toLocaleDateString("en-GB"),
+        provider,
+        variety,
+        plantingRequirement,
+      },
+      ...current,
+    ]);
     setSubmitted(true);
   };
 
@@ -1097,18 +1195,28 @@ function AdminDashboard() {
           {
             icon: Users,
             title: t.farmersRegistered,
-            value: "1,250",
+            value: allFarmers.length,
             color: "green",
           },
 
-          { icon: Map, title: t.farmParcels, value: "860", color: "blue" },
+          {
+            icon: Map,
+            title: t.farmParcels,
+            value: parcels.length,
+            color: "blue",
+          },
 
-          { icon: Sprout, title: t.assessments, value: "540", color: "orange" },
+          {
+            icon: Sprout,
+            title: t.assessments,
+            value: assessments.length,
+            color: "orange",
+          },
 
           {
             icon: CloudSun,
             title: t.weatherChecks,
-            value: "320",
+            value: "—",
             color: "purple",
           },
         ].map((item) => {
@@ -1128,7 +1236,15 @@ function AdminDashboard() {
 
               <h3>{item.value}</h3>
 
-              <span className="stat-description">{t.illustrative}</span>
+              <span className="stat-description">
+                {item.title === t.weatherChecks
+                  ? language === "rw"
+                    ? "Serivisi y'ikirere ntirahuzwa"
+                    : "Weather service not connected"
+                  : language === "rw"
+                    ? "Imibare iva mu makuru aboneka muri prototype"
+                    : "Based on available prototype records"}
+              </span>
             </div>
           );
         })}
@@ -1269,7 +1385,7 @@ function AdminDashboard() {
     </>
   );
 
-  const filteredFarmers = farmers.filter((farmer) => {
+  const filteredFarmers = allFarmers.filter((farmer) => {
     const query = farmerSearch.toLowerCase();
     const matchesSearch =
       farmer.name.toLowerCase().includes(query) ||
@@ -1322,23 +1438,26 @@ function AdminDashboard() {
         {[
           {
             label: language === "rw" ? "Abahinzi bose" : "Total farmers",
-            value: farmers.length,
+            value: allFarmers.length,
             icon: Users,
           },
           {
             label: language === "rw" ? "Konti zikora" : "Active accounts",
-            value: farmers.filter((f) => f.status === "Active").length,
+            value: allFarmers.filter((f) => f.status === "Active").length,
             icon: CheckCircle,
           },
           {
             label:
               language === "rw" ? "Zitegereje kwemezwa" : "Pending accounts",
-            value: farmers.filter((f) => f.status === "Pending").length,
+            value: allFarmers.filter((f) => f.status === "Pending").length,
             icon: Info,
           },
           {
             label: language === "rw" ? "Imirima yose" : "Total parcels",
-            value: farmers.reduce((sum, f) => sum + f.parcels, 0),
+            value: allFarmers.reduce(
+              (sum, f) => sum + (Number(f.parcels) || 0),
+              0,
+            ),
             icon: Map,
           },
         ].map((stat) => {
@@ -1355,8 +1474,8 @@ function AdminDashboard() {
               <h3>{stat.value}</h3>
               <span className="stat-description">
                 {language === "rw"
-                  ? "Amakuru y'icyitegererezo"
-                  : "Demonstration records"}
+                  ? "Harimo amakuru y'icyitegererezo n'abiyandikishije"
+                  : "Includes sample records and registered accounts"}
               </span>
             </div>
           );
@@ -1745,6 +1864,11 @@ function AdminDashboard() {
             </div>
             {[
               ["Phone number", selectedFarmer.phone],
+              ["Email", selectedFarmer.email || "Not provided"],
+              [
+                "Record source",
+                selectedFarmer.source || "Admin demonstration record",
+              ],
               ["District", selectedFarmer.district],
               ["Preferred language", selectedFarmer.language],
               ["Registered parcels", selectedFarmer.parcels],
@@ -1775,9 +1899,13 @@ function AdminDashboard() {
             <p
               style={{ marginTop: "20px", color: "#718078", fontSize: "12px" }}
             >
-              {language === "rw"
-                ? "Aya ni amakuru y'icyitegererezo. Konti nyazo zizava muri database nyuma yo guhuza backend."
-                : "These are demonstration records. Real farmer profiles will load from the database after backend integration."}
+              {selectedFarmer.source === "Registration"
+                ? language === "rw"
+                  ? "Iyi konti yavuye mu kwiyandikisha muri prototype. Igenzura ry'umutekano n'ububiko nyabwo bizakorwa na backend."
+                  : "This account came from prototype registration. Secure account management and database storage will be handled by the backend."
+                : language === "rw"
+                  ? "Iyi ni konti y'icyitegererezo yashyizweho mu rwego rwo kugerageza admin dashboard."
+                  : "This is a sample account created for testing the admin dashboard."}
             </p>
           </div>
         </div>
@@ -1837,9 +1965,11 @@ function AdminDashboard() {
         >
           <option value="">{t.parcelPlaceholder}</option>
 
-          <option value="Parcel A — Demo UPI">Parcel A — Demo UPI</option>
-
-          <option value="Parcel B — Demo UPI">Parcel B — Demo UPI</option>
+          {parcels.map((farmParcel) => (
+            <option key={farmParcel.id} value={farmParcel.id}>
+              {farmParcel.id} — {farmParcel.upi} ({farmParcel.farmer})
+            </option>
+          ))}
         </select>
       </label>
 
@@ -1929,9 +2059,11 @@ function AdminDashboard() {
           >
             <option value="">{t.parcelPlaceholder}</option>
 
-            <option value="Parcel A — Demo UPI">Parcel A — Demo UPI</option>
-
-            <option value="Parcel B — Demo UPI">Parcel B — Demo UPI</option>
+            {parcels.map((farmParcel) => (
+              <option key={farmParcel.id} value={farmParcel.id}>
+                {farmParcel.id} — {farmParcel.upi} ({farmParcel.farmer})
+              </option>
+            ))}
           </select>
         </label>
 
@@ -2145,7 +2277,7 @@ function AdminDashboard() {
 
   const handleAddParcel = (e) => {
     e.preventDefault();
-    const farmer = farmers.find((item) => item.id === newParcelFarmer);
+    const farmer = allFarmers.find((item) => item.id === newParcelFarmer);
     if (
       !farmer ||
       !newParcelUpi.trim() ||
@@ -2278,7 +2410,7 @@ function AdminDashboard() {
                   onChange={(e) => setNewParcelFarmer(e.target.value)}
                   style={fieldStyle}
                 >
-                  {farmers.map((f) => (
+                  {allFarmers.map((f) => (
                     <option key={f.id} value={f.id}>
                       {f.name} ({f.id})
                     </option>
@@ -3162,6 +3294,10 @@ function AdminDashboard() {
         <form
           onSubmit={(e) => {
             e.preventDefault();
+            localStorage.setItem(
+              "agrinova_admin_settings",
+              JSON.stringify(settings),
+            );
             setSettingsSaved(true);
           }}
           style={{ display: "grid", gap: 17, marginTop: 18 }}
