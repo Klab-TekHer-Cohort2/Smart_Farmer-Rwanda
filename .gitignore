@@ -1,0 +1,11 @@
+.env
+.env.*
+!.env.example
+.venv/
+__pycache__/
+.pytest_cache/
+*.pyc
+
+AI/data/documents/*.pdf
+AI/data/extracted/
+AI/data/chunks/
