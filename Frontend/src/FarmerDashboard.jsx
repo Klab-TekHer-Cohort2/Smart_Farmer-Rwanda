@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import {
   Sprout,
   LayoutDashboard,
@@ -1515,10 +1516,12 @@ export default function FarmerDashboard() {
           <span className="fd-brand-mark">
             <Sprout size={23} />
           </span>
-          <div>
-            <strong>AgriNova</strong>
-            <small>Farmer Portal</small>
-          </div>
+          <Link to="/" className="brand-home-link">
+            <div>
+              <h2>AgriNova</h2>
+              <span>Farmer Portal</span>
+            </div>
+          </Link>
           <button className="fd-close-menu" onClick={() => setMenuOpen(false)}>
             <X />
           </button>

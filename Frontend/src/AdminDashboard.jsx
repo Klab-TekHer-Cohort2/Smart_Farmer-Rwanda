@@ -6,7 +6,7 @@ import {
   cloneElement,
 } from "react";
 import { useAuth } from "./context/AuthContext";
-
+import { Link } from "react-router-dom";
 import {
   LayoutDashboard,
   Users,
@@ -3450,10 +3450,12 @@ function AdminDashboard() {
             <Sprout size={25} />
           </div>
 
-          <div>
-            <h2>AgriNova</h2>
-            <span>SMART FARMER RWANDA</span>
-          </div>
+         <Link to="/" className="brand-home-link">
+           <div>
+             <h2>AgriNova</h2>
+             <span>SMART FARMER RWANDA</span>
+           </div>
+         </Link>
         </div>
 
         <div className="nav-section">

@@ -884,3 +884,13 @@
     flex-wrap: wrap;
   }
 }
+.brand-home-link {
+  text-decoration: none;
+  color: inherit;
+  display: inline-block;
+  cursor: pointer;
+}
+
+.brand-home-link:hover {
+  opacity: 0.85;
+}
